@@ -17,7 +17,6 @@ import TradingViewWidget from "./components/TradingViewWidget";
 import ThemeToggle from "./components/ThemeToggle";
 import StrategyDashboard from "./components/StrategyDashboard";
 
-
 export default function App() {
   const [symbol, setSymbol] = useState("AAPL");
   const [signal, setSignal] = useState(null);
@@ -27,11 +26,11 @@ export default function App() {
   const [news, setNews] = useState([]);
 
   useEffect(() => {
-    getHealth();
-    getPositions().then(setPositions);
-    getOrders().then(setOrders);
-    getSignal(symbol).then(setSignal);
-    getNews(symbol).then(setNews);
+    getHealth().catch(console.warn);
+    getPositions().then(setPositions).catch(console.warn);
+    getOrders().then(setOrders).catch(console.warn);
+    getSignal(symbol).then(setSignal).catch(console.warn);
+    getNews(symbol).then(setNews).catch(console.warn);
 
     const ws = wsConnect((msg) => {
       if (msg.type === "tick_batch") {
@@ -43,11 +42,11 @@ export default function App() {
       }
     });
 
-    // 🔄 refresh positions & orders every 10 seconds
+    // BUG FIX: was 200ms (hammering the backend) — correct cadence is 10s
     const refresh = setInterval(async () => {
-      getPositions().then(setPositions);
-      getOrders().then(setOrders);
-    }, 200);
+      getPositions().then(setPositions).catch(console.warn);
+      getOrders().then(setOrders).catch(console.warn);
+    }, 10_000);
 
     return () => {
       clearInterval(refresh);
@@ -55,31 +54,26 @@ export default function App() {
     };
   }, [symbol]);
 
-
   const current = ticks[symbol];
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gradient-to-b dark:from-black dark:to-green-950 text-gray-900 dark:text-gray-100 transition-colors duration-500">
       <div className="max-w-7xl mx-auto p-4">
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-300 dark:border-gray-700 pb-3">
           <h1 className="text-2xl font-bold">Hybrid Trading Bot (Paper)</h1>
           <div className="flex items-center gap-4">
             <ThemeToggle />
-
           </div>
         </div>
 
-        {/* Two-column grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
-          {/* LEFT COLUMN: Dashboard */}
           <div className="lg:col-span-2 space-y-4">
             <TickerSearch
               value={symbol}
               onChange={setSymbol}
               onAnalyze={() => {
-                getSignal(symbol).then(setSignal);
-                getNews(symbol).then(setNews);
+                getSignal(symbol).then(setSignal).catch(console.warn);
+                getNews(symbol).then(setNews).catch(console.warn);
               }}
             />
 
@@ -100,7 +94,6 @@ export default function App() {
             <StrategyDashboard />
           </div>
 
-          {/* RIGHT COLUMN: Live News Feed */}
           <div className="lg:col-span-1 h-full sticky top-4">
             <NewsFeed symbol={symbol} items={news} />
           </div>

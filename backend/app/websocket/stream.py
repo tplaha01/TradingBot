@@ -1,13 +1,13 @@
 from __future__ import annotations
 from fastapi import WebSocket, WebSocketDisconnect
-from ..config import get_settings
-from ..data.market_data import FEED
-from ..strategies.hybrid import hybrid_signal
-import asyncio, json, time
+from app.config import get_settings
+from app.data.market_data import FEED
+from app.strategies.hybrid import hybrid_signal
+import asyncio
 
 class StreamManager:
     def __init__(self):
-        self.active = set()
+        self.active: set[WebSocket] = set()
 
     async def connect(self, ws: WebSocket):
         await ws.accept()
@@ -29,13 +29,23 @@ class StreamManager:
 manager = StreamManager()
 
 async def stream_loop():
+    """
+    Background task — wired to FastAPI startup in main.py.
+    Broadcasts live tick + signal data to all connected WebSocket clients.
+    BUG FIX: was defined but never started; now registered via asyncio.create_task()
+    """
     settings = get_settings()
-    symbols = ["AAPL", "MSFT", "NVDA", "SPY"]
+    symbols = ["AAPL", "MSFT", "NVDA", "SPY", "TSLA"]
     while True:
-        payload = {"type": "tick_batch", "data": []}
-        for s in symbols:
-            px = FEED.price(s)
-            sig = hybrid_signal(s)
-            payload["data"].append({"symbol": s, "price": px, "signal": sig})
-        await manager.broadcast(payload)
+        if manager.active:
+            payload = {"type": "tick_batch", "data": []}
+            for s in symbols:
+                px = FEED.price(s)
+                sig = hybrid_signal(s)
+                payload["data"].append({
+                    "symbol": s,
+                    "price": px,
+                    "signal": sig,
+                })
+            await manager.broadcast(payload)
         await asyncio.sleep(settings.WEBSOCKET_BROADCAST_INTERVAL)

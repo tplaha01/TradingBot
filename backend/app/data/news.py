@@ -1,32 +1,34 @@
 from datetime import datetime, timedelta
 import requests
-from ..config import get_settings
+from app.config import get_settings
 
 settings = get_settings()
 FINNHUB_KEY = settings.FINNHUB_KEY
 
-# in-memory cache {symbol: {"ts": datetime, "data": [...]}}
 _cache: dict[str, dict] = {}
+
 
 def latest_news(symbol: str, limit: int = 8):
     """
     Pull recent company news from Finnhub.
-    Falls back to last successful cached headlines if API fails or is rate-limited.
+    BUG FIX: now returns dicts with source/url/published_at fields
+    matching the NewsItem Pydantic model (was ts, missing source/url).
     """
     now = datetime.utcnow()
 
-    # return cached news if it's less than 1 hour old
     if symbol in _cache and (now - _cache[symbol]["ts"]).seconds < 3600:
         return _cache[symbol]["data"]
 
     if not FINNHUB_KEY:
-        print("⚠️ No FINNHUB_KEY set — using cached/sample news.")
         return _cache.get(symbol, {}).get("data", _sample_news(symbol))
 
     try:
         url = (
             f"https://finnhub.io/api/v1/company-news?"
-            f"symbol={symbol.upper()}&from={(now - timedelta(days=2)).date()}&to={now.date()}&token={FINNHUB_KEY}"
+            f"symbol={symbol.upper()}"
+            f"&from={(now - timedelta(days=2)).date()}"
+            f"&to={now.date()}"
+            f"&token={FINNHUB_KEY}"
         )
         r = requests.get(url, timeout=10)
         r.raise_for_status()
@@ -38,9 +40,10 @@ def latest_news(symbol: str, limit: int = 8):
         parsed = [
             {
                 "symbol": symbol.upper(),
-                "headline": item.get("headline"),
-                "summary": item.get("summary"),
-                "ts": datetime.utcfromtimestamp(
+                "headline": item.get("headline", ""),
+                "source": item.get("source", "Finnhub"),
+                "url": item.get("url", ""),
+                "published_at": datetime.utcfromtimestamp(
                     item.get("datetime", now.timestamp())
                 ).isoformat(),
             }
@@ -51,23 +54,26 @@ def latest_news(symbol: str, limit: int = 8):
         _cache[symbol] = {"ts": now, "data": parsed}
         return parsed
 
-
     except Exception as e:
         print(f"⚠️ Finnhub news fetch failed for {symbol}: {e}")
-        # fallback to last good cache or sample
         return _cache.get(symbol, {}).get("data", _sample_news(symbol))
 
 
 def _sample_news(symbol: str):
-    """Fallback headlines for offline or first-run mode."""
-    now = datetime.utcnow()
+    now = datetime.utcnow().isoformat()
     examples = [
-        "Company beats earnings expectations, raises guidance for next quarter",
-        "Regulatory headwinds grow after new antitrust probe is announced",
-        "Strong product launch drives record pre-orders, analysts turn bullish",
-        "Supply chain disruptions expected to impact margins in the near term",
+        ("Company beats earnings expectations, raises guidance for next quarter", "Reuters"),
+        ("Regulatory headwinds grow after new antitrust probe is announced", "Bloomberg"),
+        ("Strong product launch drives record pre-orders, analysts turn bullish", "CNBC"),
+        ("Supply chain disruptions expected to impact margins in near term", "WSJ"),
     ]
     return [
-        {"symbol": symbol.upper(), "headline": h, "summary": None, "ts": now.isoformat()}
-        for h in examples
+        {
+            "symbol": symbol.upper(),
+            "headline": h,
+            "source": src,
+            "url": "",
+            "published_at": now,
+        }
+        for h, src in examples
     ]

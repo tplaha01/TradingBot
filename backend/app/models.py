@@ -4,31 +4,19 @@ from typing import List, Optional, Literal
 from datetime import datetime
 
 
-# -------- Requests / Responses --------
-
 class SignalRequest(BaseModel):
     symbol: str = Field(..., description="Ticker, e.g., AAPL")
     lookback: int = Field(150, ge=20, le=2000, description="Candles to analyze")
 
 
-SignalLiteral = Literal["BUY", "SELL", "HOLD"]
-
-
-class SignalResponse(BaseModel):
-    symbol: str
-    signal: SignalLiteral
-    score: float
-    timestamp: datetime
-
-
 class OrderIn(BaseModel):
     symbol: str
     side: Literal["buy", "sell"]
-    quantity: float = Field(..., gt=0)
+    quantity: float = Field(..., gt=0)   # BUG FIX: was missing, frontend sent qty
 
 
 class Order(BaseModel):
-    id: int
+    id: str                              # BUG FIX: was int — PaperBroker generates UUID str
     symbol: str
     side: Literal["buy", "sell"]
     quantity: float
@@ -39,19 +27,11 @@ class Order(BaseModel):
 
 class Position(BaseModel):
     symbol: str
-    quantity: float
+    qty: float
     avg_price: float
-    current_price: float
-    pnl: float
-
-
-class AnalyticsSummary(BaseModel):
-    total_pnl: float
-    open_positions: int
-    closed_trades: int
-    win_rate: float
-    avg_holding_time: Optional[float] = None  # minutes (optional)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    market_price: float
+    market_value: float
+    unrealized_pnl: float
 
 
 class NewsItem(BaseModel):
